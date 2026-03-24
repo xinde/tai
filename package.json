@@ -1,0 +1,24 @@
+{
+  "name": "ai",
+  "version": "2.0.0",
+  "description": "AI-powered SRE CLI assistant",
+  "main": "ai.ts",
+  "bin": {
+    "ai": "ai.ts"
+  },
+  "scripts": {
+    "start": "bun ai.ts",
+    "build": "bun build --compile --target bun-macos-arm64 ai.ts --outfile dist/ai-macos-arm64",
+    "build:mac-arm": "bun build --compile --target bun-macos-arm64 ai.ts --outfile dist/ai-macos-arm64",
+    "build:mac-x64": "bun build --compile --target bun-macos-x64   ai.ts --outfile dist/ai-macos-x64",
+    "build:linux-x64": "bun build --compile --target bun-linux-x64   ai.ts --outfile dist/ai-linux-x64",
+    "build:linux-arm": "bun build --compile --target bun-linux-arm64 ai.ts --outfile dist/ai-linux-arm64",
+    "build:win-x64": "bun build --compile --target bun-windows-x64 ai.ts --outfile dist/ai-win-x64.exe",
+    "build:all": "bun run build:mac-arm && bun run build:mac-x64 && bun run build:linux-x64 && bun run build:linux-arm && bun run build:win-x64"
+  },
+  "author": "https://github.com/xinde",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.5.0"
+  }
+}
