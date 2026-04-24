@@ -140,6 +140,7 @@ Agent 是整个系统的核心，负责：
 | `--auto` | 自动执行危险命令，跳过确认 |
 | `--debug` | 打印 LLM token 用量和工具调用 |
 | `--json` | 以 JSON 格式输出最终结果 |
+| `--shhh` | 静默模式，仅输出工具名称、参数和最终结果 |
 
 ### `guard/safety.ts` — 安全守卫
 
@@ -158,6 +159,10 @@ Agent 是整个系统的核心，负责：
 - `docker rm` / `docker rmi`
 - `kill -9` / `pkill`
 - `systemctl stop/disable`
+
+**自定义规则：**
+
+以上为内置规则，用户可在 `~/.ai-tui/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，详见 [配置](#配置) 章节。
 
 ---
 
@@ -270,9 +275,27 @@ ai init
   "apiKey": "",
   "model": "glm-5",
   "maxSteps": 12,
-  "temperature": 0.3
+  "temperature": 0.3,
+  "blockedPatterns": [],
+  "dangerousPatterns": []
 }
 ```
+
+**自定义安全规则**
+
+可通过 `blockedPatterns` 和 `dangerousPatterns` 追加自定义正则表达式，与内置规则合并生效：
+
+```json
+{
+  "blockedPatterns": ["\\bformat\\b", "\\bdrop\\s+database\\b"],
+  "dangerousPatterns": ["\\bnginx\\b.*stop", "\\biptables\\b"]
+}
+```
+
+- `blockedPatterns` — 绝对禁止执行，无法绕过
+- `dangerousPatterns` — 需用户手动确认后执行（`--auto` 可跳过确认）
+- 值为正则表达式字符串数组，注意 JSON 中反斜杠需要转义（`\b` → `\\b`）
+- 内置规则始终保留，自定义规则在内置规则基础上追加
 
 ---
 
@@ -332,7 +355,7 @@ ai --help
 | 需求文档章节 | 实现位置 | 状态 |
 |---|---|---|
 | CLI 命令格式 `ai <task>` | `cli/index.ts` | ✅ |
-| `--model / --debug / --auto / --json` | `cli/index.ts` | ✅ |
+| `--model / --debug / --auto / --json / --shhh` | `cli/index.ts` | ✅ |
 | Agent Loop | `agent/agent.ts` | ✅ |
 | System Prompt（SRE 角色）| `agent/agent.ts` | ✅ |
 | Tool: shell | `tools/shell.ts` | ✅ |

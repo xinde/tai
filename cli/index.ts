@@ -10,6 +10,7 @@ interface ParsedArgs {
   auto: boolean;
   debug: boolean;
   json: boolean;
+  shhh: boolean;
 }
 
 // ─── 参数解析 ─────────────────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ interface ParsedArgs {
  * 其余非 flag 参数拼接为任务描述
  */
 function parseArgs(argv: string[]): ParsedArgs {
-  const opts: ParsedArgs = { task: "", init: false, auto: false, debug: false, json: false };
+  const opts: ParsedArgs = { task: "", init: false, auto: false, debug: false, json: false, shhh: false };
   const positional: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -33,6 +34,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       opts.json = true;
     } else if (arg === "--model") {
       opts.model = argv[++i];
+    } else if (arg === "--shhh") {
+      opts.shhh = true;
     } else if (arg === "init") {
       opts.init = true;
     } else if (!arg.startsWith("--")) {
@@ -61,6 +64,7 @@ AI 运维助手 —— AI SRE CLI          v2.0
   --auto                     自动执行危险命令，无需逐条确认
   --debug                    打印工具调用详情和 token 用量
   --json                     以 JSON 格式输出最终结果
+  --shhh                     静默模式，仅输出工具名称、参数和最终结果
 
 配置（优先级：环境变量 > ~/.ai-tui/config.json > 内置默认值）:
   LLM_API_URL                API 地址
@@ -91,7 +95,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  if (!parsed.json) {
+  if (!parsed.json && !parsed.shhh) {
     const model = parsed.model ?? defaultConfig.model;
     console.log(`\n🤖 AI 运维助手  [模型: ${model}]\n`);
     console.log(`任务: ${parsed.task}\n`);
@@ -103,6 +107,7 @@ export async function main(): Promise<void> {
     auto: parsed.auto,
     debug: parsed.debug,
     json: parsed.json,
+    shhh: parsed.shhh,
   });
 
   try {

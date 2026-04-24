@@ -27,6 +27,8 @@ interface JsonConfig {
   model?: string;
   maxSteps?: number;
   temperature?: number;
+  blockedPatterns?: string[];
+  dangerousPatterns?: string[];
 }
 
 function loadJsonConfig(): JsonConfig {
@@ -55,11 +57,28 @@ function mergeConfig(): AgentConfig {
 
 export const defaultConfig: AgentConfig = mergeConfig();
 
+// ─── 用户自定义安全规则 ─────────────────────────────────────────────────────
+
+export function loadUserSafetyPatterns(): { blocked: RegExp[]; dangerous: RegExp[] } {
+  const json = loadJsonConfig();
+  const toRegexps = (patterns?: string[]): RegExp[] =>
+    (patterns ?? []).map((p) => new RegExp(p));
+  return {
+    blocked: toRegexps(json.blockedPatterns),
+    dangerous: toRegexps(json.dangerousPatterns),
+  };
+}
+
 // ─── Init: 写入默认配置到用户目录 ───────────────────────────────────────────
 
 export function initConfig(): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULTS, null, 2), "utf-8");
+  const initTemplate = {
+    ...DEFAULTS,
+    blockedPatterns: [] as string[],
+    dangerousPatterns: [] as string[],
+  };
+  writeFileSync(CONFIG_PATH, JSON.stringify(initTemplate, null, 2), "utf-8");
   console.log(`✅ 配置文件已写入: ${CONFIG_PATH}`);
   console.log("   请编辑此文件填入你的 API Key 和偏好设置。\n");
 }

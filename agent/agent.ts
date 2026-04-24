@@ -28,6 +28,7 @@ export interface AgentOptions {
   auto: boolean;    // 自动执行，不需要用户确认危险命令
   debug: boolean;   // 调试模式，打印 token 用量和工具调用
   json: boolean;    // 以 JSON 格式输出最终结果
+  shhh: boolean;    // 静默模式，仅输出工具名称、参数和最终结果
 }
 
 // ─── Agent 类 ─────────────────────────────────────────────────────────────────
@@ -134,7 +135,7 @@ export class Agent {
       messages.push(reply);
 
       // LLM 如果同时返回文本和工具调用，先展示文本（推理过程）
-      if (reply.content && !this.opts.json) {
+      if (reply.content && !this.opts.json && !this.opts.shhh) {
         // 只在有工具调用时才把内容当作推理过程打印
         if (reply.tool_calls && reply.tool_calls.length > 0) {
           process.stdout.write(`\n💭 ${reply.content}\n`);
@@ -149,12 +150,14 @@ export class Agent {
         } else {
           console.log(`\n${content}\n`);
         }
-        console.log(`\n------------`);
-        console.log(`\n任务完成，共 ${step} 轮对话。`);
+        if (!this.opts.shhh) {
+          console.log(`\n------------`);
+          console.log(`\n任务完成，共 ${step + 1} 轮对话。`);
+        }
         return;
       }
 
-      if(reply.tool_calls && reply.tool_calls.length > 0){
+      if(reply.tool_calls && reply.tool_calls.length > 0 && !this.opts.shhh){
           console.log(`\n第 ${step+1} 轮，${reply.tool_calls.length} 个工具调用，原始调用数据: \n${JSON.stringify(reply.tool_calls, null, 2)}`);
       }
 
@@ -162,7 +165,7 @@ export class Agent {
       for (const toolCall of reply.tool_calls) {
         const { name, arguments: argsJson } = toolCall.function;
 
-        if (!this.opts.json) {
+        if (!this.opts.json && !this.opts.shhh) {
           // 解析参数，提取关键信息显示给用户
           let detail = "";
           try {
@@ -173,11 +176,22 @@ export class Agent {
             else if (name === "filesystem") detail = `${a.action} ${a.path}`;
           } catch { /* 解析失败则不显示参数 */ }
           console.log(`\n┌─ 工具: ${name}${detail ? `  →  ${detail}` : ""}`);
+        } else if (this.opts.shhh) {
+          // 静默模式：仅显示工具名称和关键参数
+          let detail = "";
+          try {
+            const a = JSON.parse(argsJson);
+            if (name === "shell")      detail = a.cmd;
+            else if (name === "logs")  detail = `${a.path} (${a.lines ?? 50} lines)`;
+            else if (name === "docker") detail = `${a.action}${a.container ? " " + a.container : ""}`;
+            else if (name === "filesystem") detail = `${a.action} ${a.path}`;
+          } catch { /* 解析失败则不显示参数 */ }
+          console.log(`  [${name}] ${detail}`);
         }
 
         const output = await this.executeTool(name, argsJson);
 
-        if (!this.opts.json) {
+        if (!this.opts.json && !this.opts.shhh) {
           // 输出结果，太长时截断显示
           const display =
             output.length > 2000 ? output.slice(0, 2000) + "\n...(已截断)" : output;

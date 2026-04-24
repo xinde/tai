@@ -3,10 +3,15 @@
  * 分两级：
  *   1. BLOCKED  —— 绝对禁止，程序直接拒绝执行
  *   2. DANGEROUS —— 危险操作，需要用户手动确认
+ *
+ * 内置规则始终生效，用户可在 ~/.ai-tui/config.json 中通过
+ * blockedPatterns / dangerousPatterns 数组追加自定义正则。
  */
 
+import { loadUserSafetyPatterns } from "../config/model";
+
 /** 绝对不允许执行的指令模式（不可逆 / 毁灭性操作） */
-const BLOCKED: RegExp[] = [
+const BUILTIN_BLOCKED: RegExp[] = [
   /rm\s+-rf\s+\/(?:\s|$)/,         // rm -rf /
   /\bmkfs\b/,                      // 格式化文件系统
   /\bshutdown\b/,                  // 关机
@@ -17,7 +22,7 @@ const BLOCKED: RegExp[] = [
 ];
 
 /** 危险但可在用户确认后执行的指令模式 */
-const DANGEROUS: RegExp[] = [
+const BUILTIN_DANGEROUS: RegExp[] = [
   /\brm\b.*-[a-zA-Z]*r/,          // 递归删除
   /apt\s+(remove|purge)/,          // 卸载软件包
   /yum\s+remove/,
@@ -29,6 +34,11 @@ const DANGEROUS: RegExp[] = [
   /systemctl\s+(stop|disable|mask)\b/,
   /service\s+\S+\s+stop\b/,
 ];
+
+// 加载用户自定义规则，与内置规则合并
+const userPatterns = loadUserSafetyPatterns();
+const BLOCKED = [...BUILTIN_BLOCKED, ...userPatterns.blocked];
+const DANGEROUS = [...BUILTIN_DANGEROUS, ...userPatterns.dangerous];
 
 /** 检查命令是否绝对禁止 */
 export function isBlocked(cmd: string): boolean {
