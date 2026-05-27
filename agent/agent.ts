@@ -1,9 +1,5 @@
-import { defaultConfig, type AgentConfig } from "../config/model";
-import { shellDef, shellRun } from "../tools/shell";
-import { doctorDef, doctorRun } from "../tools/doctor";
-import { logsDef, logsRun } from "../tools/logs";
-import { dockerDef, dockerRun } from "../tools/docker";
-import { fsDef, fsRun } from "../tools/fs";
+import { type AgentConfig } from "../config/model";
+import { toolRegistry, getAllToolDefs, getToolNames } from "../tools/registry";
 import { collectEnvInfo, buildSystemPrompt } from "./prompt";
 
 // ─── 类型定义（OpenAI Chat API 格式）────────────────────────────────────────
@@ -36,48 +32,73 @@ export interface AgentOptions {
 export class Agent {
   private config: AgentConfig;
   private opts: AgentOptions;
+  private aborted = false;
 
   constructor(config: AgentConfig, opts: AgentOptions) {
     this.config = config;
     this.opts = opts;
   }
 
-  /** 调用 LLM，发送完整对话历史，返回模型的下一条消息 */
+  /** 允许外部中止 Agent 循环 */
+  abort(): void {
+    this.aborted = true;
+  }
+
+  /** 调用 LLM，支持自动重试（网络/5xx 错误时） */
   private async callLLM(messages: Message[]): Promise<Message> {
-    const tools = [shellDef, doctorDef, logsDef, dockerDef, fsDef];
+    const tools = getAllToolDefs();
     const modelName = this.opts.model ?? this.config.model;
+    const maxRetries = 2;
 
-    const res = await fetch(this.config.apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages,
-        tools,
-        tool_choice: "auto",
-        temperature: this.config.temperature,
-        max_tokens: 2048,
-      }),
-    });
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(this.config.apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages,
+            tools,
+            tool_choice: "auto",
+            temperature: this.config.temperature,
+            max_tokens: 2048,
+          }),
+        });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`LLM API 请求失败 (${res.status}): ${body}`);
+        if (!res.ok) {
+          const body = await res.text();
+          if (res.status >= 500 && attempt < maxRetries) {
+            this.debugLog(`[llm] 服务端错误 ${res.status}，第 ${attempt + 1} 次重试...`);
+            await this.sleep(1000 * (attempt + 1));
+            continue;
+          }
+          throw new Error(`LLM API 请求失败 (${res.status}): ${body}`);
+        }
+
+        const data = (await res.json()) as any;
+
+        if (this.opts.debug) {
+          const usage = data.usage ?? {};
+          this.debugLog(
+            `[llm] tokens: prompt=${usage.prompt_tokens ?? "?"}  completion=${usage.completion_tokens ?? "?"}`
+          );
+        }
+
+        return data.choices[0].message as Message;
+      } catch (err: any) {
+        if (attempt < maxRetries && this.isNetworkError(err)) {
+          this.debugLog(`[llm] 网络错误: ${err.message}，第 ${attempt + 1} 次重试...`);
+          await this.sleep(1000 * (attempt + 1));
+          continue;
+        }
+        throw err;
+      }
     }
 
-    const data = (await res.json()) as any;
-
-    if (this.opts.debug) {
-      const usage = data.usage ?? {};
-      process.stderr.write(
-        `[llm] tokens: prompt=${usage.prompt_tokens ?? "?"}  completion=${usage.completion_tokens ?? "?"}\n`
-      );
-    }
-
-    return data.choices[0].message as Message;
+    throw new Error("LLM API 请求重试耗尽");
   }
 
   /** 根据工具名称路由并执行对应工具 */
@@ -89,23 +110,24 @@ export class Agent {
       return `ERROR: 无法解析工具参数 JSON: ${argsJson}`;
     }
 
-    if (this.opts.debug) {
-      process.stderr.write(`[tool] ${name}(${JSON.stringify(args)})\n`);
+    this.debugLog(`[tool] ${name}(${JSON.stringify(args)})`);
+
+    const entry = toolRegistry[name];
+    if (!entry) {
+      return `ERROR: 未知工具 "${name}"。可用工具: ${getToolNames().join(", ")}`;
     }
 
-    switch (name) {
-      case "shell":
-        return shellRun(args, { auto: this.opts.auto, debug: this.opts.debug });
-      case "doctor":
-        return doctorRun();
-      case "logs":
-        return logsRun(args);
-      case "docker":
-        return dockerRun(args);
-      case "filesystem":
-        return fsRun(args);
-      default:
-        return `未知工具: ${name}`;
+    return entry.run(args, { auto: this.opts.auto, debug: this.opts.debug });
+  }
+
+  /** 获取工具调用的可读摘要 */
+  private getToolSummary(name: string, argsJson: string): string {
+    const entry = toolRegistry[name];
+    if (!entry?.summarize) return "";
+    try {
+      return entry.summarize(JSON.parse(argsJson));
+    } catch {
+      return "";
     }
   }
 
@@ -115,91 +137,52 @@ export class Agent {
    * 直到 LLM 不再调用工具（返回最终回答）或达到最大步数
    */
   async run(userInput: string): Promise<void> {
-    // 采集当前系统环境信息，注入 system prompt
     const envInfo = await collectEnvInfo();
     const systemPrompt = buildSystemPrompt(envInfo);
 
-    if (this.opts.debug) {
-      process.stderr.write(`[env]\n${envInfo}\n\n`);
-    }
+    this.debugLog(`[env]\n${envInfo}\n`);
 
     const messages: Message[] = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userInput },
     ];
 
-    // 循环：发送 LLM 回复 → 调用工具 → 将结果反馈给 LLM → 循环
-
     for (let step = 0; step < this.config.maxSteps; step++) {
+      if (this.aborted) {
+        this.print("\n⚠ 任务已中断。");
+        return;
+      }
+
       const reply = await this.callLLM(messages);
       messages.push(reply);
 
-      // LLM 如果同时返回文本和工具调用，先展示文本（推理过程）
-      if (reply.content && !this.opts.json && !this.opts.shhh) {
-        // 只在有工具调用时才把内容当作推理过程打印
-        if (reply.tool_calls && reply.tool_calls.length > 0) {
-          process.stdout.write(`\n💭 ${reply.content}\n`);
-        }
+      // LLM 返回推理过程文本（与工具调用同时存在时）
+      if (reply.content && reply.tool_calls?.length && !this.opts.json && !this.opts.shhh) {
+        process.stdout.write(`\n💭 ${reply.content}\n`);
       }
 
       // 没有工具调用 → LLM 返回最终结论
       if (!reply.tool_calls || reply.tool_calls.length === 0) {
-        const content = reply.content ?? "(无回复)";
-        if (this.opts.json) {
-          console.log(JSON.stringify({ result: content }, null, 2));
-        } else {
-          console.log(`\n${content}\n`);
-        }
-        if (!this.opts.shhh) {
-          console.log(`\n------------`);
-          console.log(`\n任务完成，共 ${step + 1} 轮对话。`);
-        }
+        this.printFinalResult(reply.content ?? "(无回复)", step + 1);
         return;
       }
 
-      if(reply.tool_calls && reply.tool_calls.length > 0 && !this.opts.shhh){
-          console.log(`\n第 ${step+1} 轮，${reply.tool_calls.length} 个工具调用，原始调用数据: \n${JSON.stringify(reply.tool_calls, null, 2)}`);
+      // 显示本轮工具调用概览
+      if (!this.opts.json && !this.opts.shhh) {
+        console.log(`\n── 第 ${step + 1} 轮 ─ ${reply.tool_calls.length} 个工具调用 ──`);
       }
 
-      // 并发执行本轮所有工具调用
+      // 执行本轮所有工具调用
       for (const toolCall of reply.tool_calls) {
         const { name, arguments: argsJson } = toolCall.function;
+        const summary = this.getToolSummary(name, argsJson);
 
-        if (!this.opts.json && !this.opts.shhh) {
-          // 解析参数，提取关键信息显示给用户
-          let detail = "";
-          try {
-            const a = JSON.parse(argsJson);
-            if (name === "shell")      detail = `$ ${a.cmd}`;
-            else if (name === "logs")  detail = `${a.path}  (${a.lines ?? 50} lines)`;
-            else if (name === "docker") detail = `${a.action}${a.container ? " " + a.container : ""}`;
-            else if (name === "filesystem") detail = `${a.action} ${a.path}`;
-          } catch { /* 解析失败则不显示参数 */ }
-          console.log(`\n┌─ 工具: ${name}${detail ? `  →  ${detail}` : ""}`);
-        } else if (this.opts.shhh) {
-          // 静默模式：仅显示工具名称和关键参数
-          let detail = "";
-          try {
-            const a = JSON.parse(argsJson);
-            if (name === "shell")      detail = a.cmd;
-            else if (name === "logs")  detail = `${a.path} (${a.lines ?? 50} lines)`;
-            else if (name === "docker") detail = `${a.action}${a.container ? " " + a.container : ""}`;
-            else if (name === "filesystem") detail = `${a.action} ${a.path}`;
-          } catch { /* 解析失败则不显示参数 */ }
-          console.log(`  [${name}] ${detail}`);
-        }
+        this.printToolStart(name, summary);
 
         const output = await this.executeTool(name, argsJson);
 
-        if (!this.opts.json && !this.opts.shhh) {
-          // 输出结果，太长时截断显示
-          const display =
-            output.length > 2000 ? output.slice(0, 2000) + "\n...(已截断)" : output;
-          console.log(display);
-          console.log("└─────");
-        }
+        this.printToolResult(output);
 
-        // 将工具执行结果作为 tool 角色消息反馈给 LLM
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -208,6 +191,61 @@ export class Agent {
       }
     }
 
-    console.log("\n已达到最大步数上限。");
+    this.print("\n⚠ 已达到最大步数上限，任务未完成。建议拆分为更小的子任务。");
+  }
+
+  // ─── 输出方法 ─────────────────────────────────────────────────────────────
+
+  private printFinalResult(content: string, steps: number): void {
+    if (this.opts.json) {
+      console.log(JSON.stringify({ result: content }, null, 2));
+    } else {
+      console.log(`\n${content}\n`);
+      if (!this.opts.shhh) {
+        console.log("─".repeat(40));
+        console.log(`✓ 任务完成，共 ${steps} 轮对话。`);
+      }
+    }
+  }
+
+  private printToolStart(name: string, summary: string): void {
+    if (this.opts.json) return;
+    if (this.opts.shhh) {
+      console.log(`  [${name}] ${summary}`);
+    } else {
+      console.log(`\n┌─ 工具: ${name}${summary ? `  →  ${summary}` : ""}`);
+    }
+  }
+
+  private printToolResult(output: string): void {
+    if (this.opts.json || this.opts.shhh) return;
+    const display = output.length > 2000 ? output.slice(0, 2000) + "\n...(已截断)" : output;
+    console.log(display);
+    console.log("└─────");
+  }
+
+  private print(msg: string): void {
+    if (!this.opts.json) console.log(msg);
+  }
+
+  private debugLog(msg: string): void {
+    if (this.opts.debug) process.stderr.write(msg + "\n");
+  }
+
+  // ─── 辅助方法 ─────────────────────────────────────────────────────────────
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  private isNetworkError(err: any): boolean {
+    const msg = String(err?.message ?? "").toLowerCase();
+    return (
+      msg.includes("fetch") ||
+      msg.includes("econnrefused") ||
+      msg.includes("enotfound") ||
+      msg.includes("timeout") ||
+      msg.includes("network")
+    );
   }
 }

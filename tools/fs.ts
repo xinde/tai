@@ -40,6 +40,11 @@ export async function fsRun(args: {
 }): Promise<string> {
   const { action } = args;
 
+  // 只允许绝对路径，防止路径穿越
+  if (!path.isAbsolute(args.path)) {
+    return "ERROR: 只允许使用绝对路径，例如 /var/log 或 /etc/nginx/nginx.conf";
+  }
+
   // 规范化路径，消除 ../
   const target = path.normalize(args.path);
 
