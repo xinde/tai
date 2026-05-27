@@ -38,6 +38,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       opts.shhh = true;
     } else if (arg === "init") {
       opts.init = true;
+    } else if (arg === "help" || arg === "--help" || arg === "-h") {
+      printHelp();
+      process.exit(0);
     } else if (!arg.startsWith("--")) {
       positional.push(arg);
     }
