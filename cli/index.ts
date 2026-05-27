@@ -10,6 +10,7 @@ interface ParsedArgs {
   task: string;
   init: boolean;
   model?: string;
+  max?: number;
   auto: boolean;
   debug: boolean;
   json: boolean;
@@ -25,7 +26,7 @@ interface ParsedArgs {
  * 其余非 flag 参数拼接为任务描述
  */
 function parseArgs(argv: string[]): ParsedArgs {
-  const opts: ParsedArgs = { task: "", init: false, auto: false, debug: false, json: false, shhh: false, version: false };
+  const opts: ParsedArgs = { task: "", init: false, auto: false, debug: false, json: false, shhh: false, version: false, max: undefined };
   const positional: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -38,6 +39,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--version":
       case "-v":        opts.version = true; break;
       case "--model":   opts.model = argv[++i]; break;
+      case "--max":     opts.max = parseInt(argv[++i], 10); break;
       case "init":      opts.init = true; break;
       case "help":
       case "--help":
@@ -71,6 +73,7 @@ AI 运维助手 —— AI SRE CLI          v${VERSION}
   --debug                    打印工具调用详情和 token 用量
   --json                     以 JSON 格式输出最终结果
   --shhh                     静默模式，仅输出工具名称和最终结果
+  --max <n>                  临时设置最大请求步数（默认: 12）
   -v, --version              显示版本号
   -h, --help                 显示帮助信息
 
@@ -128,7 +131,9 @@ export async function main(): Promise<void> {
     console.log("─".repeat(50));
   }
 
-  const agent = new Agent(defaultConfig, {
+  const config = parsed.max ? { ...defaultConfig, maxSteps: parsed.max } : defaultConfig;
+
+  const agent = new Agent(config, {
     model: parsed.model,
     auto: parsed.auto,
     debug: parsed.debug,
