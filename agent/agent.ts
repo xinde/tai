@@ -1,6 +1,7 @@
 import { type AgentConfig } from "../config/model";
 import { toolRegistry, getAllToolDefs, getToolNames } from "../tools/registry";
 import { collectEnvInfo, buildSystemPrompt } from "./prompt";
+import { Spinner } from "../utils/spinner";
 
 // ─── 类型定义（OpenAI Chat API 格式）────────────────────────────────────────
 
@@ -33,15 +34,18 @@ export class Agent {
   private config: AgentConfig;
   private opts: AgentOptions;
   private aborted = false;
+  private spinner: Spinner;
 
   constructor(config: AgentConfig, opts: AgentOptions) {
     this.config = config;
     this.opts = opts;
+    this.spinner = new Spinner();
   }
 
   /** 允许外部中止 Agent 循环 */
   abort(): void {
     this.aborted = true;
+    this.spinner.stop();
   }
 
   /** 调用 LLM，支持自动重试（网络/5xx 错误时） */
@@ -153,7 +157,12 @@ export class Agent {
         return;
       }
 
+      if (!this.opts.json && !this.opts.shhh) {
+        this.spinner.start(step === 0 ? "思考中" : "继续思考");
+      }
+
       const reply = await this.callLLM(messages);
+      this.spinner.stop();
       messages.push(reply);
 
       // LLM 返回推理过程文本（与工具调用同时存在时）
