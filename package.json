@@ -1,7 +1,7 @@
 {
-  "name": "ai",
+  "name": "tai",
   "version": "2.1.0",
-  "description": "AI-powered SRE CLI assistant",
+  "description": "AI-powered CLI assistant",
   "main": "ai.ts",
   "bin": {
     "ai": "ai.ts"

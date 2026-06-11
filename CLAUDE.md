@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI 运维助手 (aiTui) — an AI-powered SRE CLI tool that uses natural language to diagnose, fix, and verify system issues. Based on OpenAI function calling agent loop, zero external npm dependencies.
+终端 AI 助手 (TAI) — an AI-powered CLI tool that uses natural language to diagnose, fix, and verify system issues. Based on OpenAI function calling agent loop, zero external npm dependencies.
 
 ## Commands
 

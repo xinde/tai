@@ -1,9 +1,9 @@
 /**
  * 终端加载动画 spinner
- * 在等待 LLM 响应时显示动态字符，避免用户以为程序卡死
+ * 使用简单 ASCII 字符，所有终端都支持
  */
 
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const FRAMES = ["-", "\\", "|", "/"];
 const INTERVAL = 80;
 
 export class Spinner {
@@ -17,7 +17,7 @@ export class Spinner {
 
   start(message?: string): void {
     if (message) this.message = message;
-    if (this.timer) return; // 已经在转了
+    if (this.timer) return;
     this.frameIdx = 0;
     process.stderr.write(`\r${FRAMES[0]} ${this.message}`);
     this.timer = setInterval(() => {
@@ -26,7 +26,6 @@ export class Spinner {
     }, INTERVAL);
   }
 
-  /** 更新显示文字（不停止动画） */
   update(message: string): void {
     this.message = message;
   }

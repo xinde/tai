@@ -19,6 +19,7 @@ const BUILTIN_BLOCKED: RegExp[] = [
   /:\(\)\s*\{[\s\S]*\|[\s\S]*&/,  // Fork Bomb
   /dd\s+.*of=\/dev\/(sd|nvme|xvd|hd)/i, // 覆写磁盘设备
   />\s*\/dev\/(sd|nvme|xvd|hd)/i, // 重定向覆写磁盘
+  /chmod\s+777\s+\//,              // 危险权限设置
 ];
 
 /** 危险但可在用户确认后执行的指令模式 */
@@ -33,6 +34,8 @@ const BUILTIN_DANGEROUS: RegExp[] = [
   /\bpkill\b/,
   /systemctl\s+(stop|disable|mask)\b/,
   /service\s+\S+\s+stop\b/,
+  /systemctl\s+restart\s+\S+/,     // 重启服务（可能影响业务）
+  /crontab\s+-r/,                  // 清空定时任务
 ];
 
 // 加载用户自定义规则，与内置规则合并

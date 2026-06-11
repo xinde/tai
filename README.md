@@ -1,6 +1,6 @@
-# AI 运维助手
+# 终端 AI 助手
 
-> 用自然语言驱动的 AI SRE CLI 工具。一条命令，完成诊断、修复、验证。
+> 用自然语言驱动的终端 AI 助手 CLI 工具。一条命令，完成诊断、修复、验证。
 
 ```
 ai fix nginx
@@ -27,7 +27,7 @@ ai "check disk usage" --debug
 
 ## 项目目标
 
-开发一个 AI 运维 CLI 工具，目标体验：
+开发一个终端 AI 助手 CLI 工具，目标体验：
 
 ```
 ssh server
@@ -88,7 +88,7 @@ Agent 循环基于 OpenAI function calling 标准格式，不依赖任何外部 
 ## 项目结构
 
 ```
-aiTui/
+TAI/
 ├── ai.ts                  # 入口文件（3 行，委托给 cli/index.ts）
 │
 ├── cli/
@@ -229,7 +229,7 @@ bun ai.ts "check disk" --model DeepSeek-V3.1
 **运行示例（`ai fix nginx` 完整流程）：**
 
 ```
-🤖 AI 运维助手  [模型: qwen2.5-coder]
+🤖 终端 AI 助手  [模型: qwen2.5-coder]
 
 任务: fix nginx
 
@@ -320,17 +320,17 @@ bun run build:win-x64           # Windows x64
 
 ```bash
 # macOS/Linux
-sudo ln -sf /path/to/aiTui/dist/ai-macos-arm64 /usr/local/bin/ai
+sudo ln -sf /path/to/TAI/dist/ai-macos-arm64 /usr/local/bin/ai
 
 # Windows (以管理员运行 PowerShell)
-New-Item -ItemType SymbolicLink -Path "C:\Program Files\ai.exe" -Target "C:\path\to\aiTui\dist\ai-win-x64.exe"
+New-Item -ItemType SymbolicLink -Path "C:\Program Files\tai.exe" -Target "C:\path\to\TAI\dist\ai-win-x64.exe"
 ```
 
 方式二：加入 PATH
 
 ```bash
 # macOS/Linux
-echo 'export PATH="/path/to/aiTui/dist:$PATH"' >> ~/.zshrc
+echo 'export PATH="/path/to/TAI/dist:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -357,7 +357,7 @@ ai --help
 | CLI 命令格式 `ai <task>` | `cli/index.ts` | ✅ |
 | `--model / --debug / --auto / --json / --shhh` | `cli/index.ts` | ✅ |
 | Agent Loop | `agent/agent.ts` | ✅ |
-| System Prompt（SRE 角色）| `agent/agent.ts` | ✅ |
+| System Prompt（AI 助手角色）| `agent/agent.ts` | ✅ |
 | Tool: shell | `tools/shell.ts` | ✅ |
 | Tool: doctor | `tools/doctor.ts` | ✅ |
 | Tool: logs | `tools/logs.ts` | ✅ |

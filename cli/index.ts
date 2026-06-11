@@ -1,6 +1,7 @@
 import { Agent } from "../agent/agent";
 import { defaultConfig, initConfig, CONFIG_PATH } from "../config/model";
 import { existsSync } from "fs";
+import { color } from "../utils/color";
 
 const VERSION = "2.1.0";
 
@@ -58,36 +59,36 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 function printHelp(): void {
   console.log(`
-AI 运维助手 —— AI SRE CLI          v${VERSION}
+${color.bold("终端 AI 助手")} —— AI CLI          ${color.gray(`v${VERSION}`)}
 
 用法:
-  ai <任务描述>              用自然语言描述一个运维任务
-  ai doctor                  运行完整系统健康检查并由 AI 分析
-  ai "fix nginx"             自动诊断并修复服务
-  ai init                    初始化配置文件（写入 ~/.ai-tui/config.json）
-  ai help                    显示此帮助信息
+  ${color.green("ai <任务描述>")}              用自然语言描述一个任务
+  ${color.green("ai doctor")}                  运行完整系统健康检查并由 AI 分析
+  ${color.green('ai "fix nginx"')}             自动诊断并修复服务
+  ${color.green("ai init")}                    初始化配置文件（写入 ~/.ai-tui/config.json）
+  ${color.green("ai help")}                    显示此帮助信息
 
 选项:
-  --model <name>             指定 LLM 模型（默认: ${defaultConfig.model}）
-  --auto                     自动执行危险命令，无需逐条确认
-  --debug                    打印工具调用详情和 token 用量
-  --json                     以 JSON 格式输出最终结果
-  --shhh                     静默模式，仅输出工具名称和最终结果
-  --max <n>                  临时设置最大请求步数（默认: 12）
-  -v, --version              显示版本号
-  -h, --help                 显示帮助信息
+  ${color.yellow("--model <name>")}             指定 LLM 模型（默认: ${defaultConfig.model}）
+  ${color.yellow("--auto")}                     自动执行危险命令，无需逐条确认
+  ${color.yellow("--debug")}                    打印工具调用详情和 token 用量
+  ${color.yellow("--json")}                     以 JSON 格式输出最终结果
+  ${color.yellow("--shhh")}                     静默模式，仅输出工具名称和最终结果
+  ${color.yellow("--max <n>")}                  临时设置最大请求步数（默认: 12）
+  ${color.yellow("-v, --version")}              显示版本号
+  ${color.yellow("-h, --help")}                 显示帮助信息
 
 配置（优先级：环境变量 > ~/.ai-tui/config.json > 内置默认值）:
-  LLM_API_URL                API 地址
-  LLM_API_KEY                API 密钥
-  LLM_MODEL                  模型名称
+  ${color.blue("LLM_API_URL")}                API 地址
+  ${color.blue("LLM_API_KEY")}                API 密钥
+  ${color.blue("LLM_MODEL")}                  模型名称
 
 示例:
-  ai init                     # 生成配置文件后手动编辑
-  ai "install nginx"
-  ai "check disk usage"
-  ai doctor --json
-  ai "fix nginx" --debug --auto
+  ${color.gray("ai init")}                     # 生成配置文件后手动编辑
+  ${color.gray('ai "install nginx"')}
+  ${color.gray('ai "check disk usage"')}
+  ${color.gray("ai doctor --json")}
+  ${color.gray('ai "fix nginx" --debug --auto')}
 `);
 }
 
@@ -126,9 +127,9 @@ export async function main(): Promise<void> {
 
   if (!parsed.json && !parsed.shhh) {
     const model = parsed.model ?? defaultConfig.model;
-    console.log(`\n🤖 AI 运维助手  [模型: ${model}]`);
-    console.log(`📋 任务: ${parsed.task}`);
-    console.log("─".repeat(50));
+    console.log(`\n🤖 ${color.bold("终端 AI 助手")}  [模型: ${color.cyan(model)}]`);
+    console.log(`📋 任务: ${color.yellow(parsed.task)}`);
+    console.log(color.dim("─".repeat(50)));
   }
 
   const config = parsed.max ? { ...defaultConfig, maxSteps: parsed.max } : defaultConfig;

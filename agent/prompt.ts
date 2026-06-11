@@ -88,7 +88,7 @@ export async function collectEnvInfo(): Promise<string> {
  * @param envInfo  由 collectEnvInfo() 返回的环境描述字符串
  */
 export function buildSystemPrompt(envInfo: string): string {
-  return `You are an expert SRE (Site Reliability Engineer) AI assistant.
+  return `You are an expert terminal AI assistant, specialized in system administration and operations tasks.
 
 ## Current Execution Environment
 ${envInfo}

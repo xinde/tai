@@ -2,6 +2,7 @@ import { type AgentConfig } from "../config/model";
 import { toolRegistry, getAllToolDefs, getToolNames } from "../tools/registry";
 import { collectEnvInfo, buildSystemPrompt } from "./prompt";
 import { Spinner } from "../utils/spinner";
+import { color } from "../utils/color";
 
 // ─── 类型定义（OpenAI Chat API 格式）────────────────────────────────────────
 
@@ -165,15 +166,15 @@ export class Agent {
       this.spinner.stop();
       messages.push(reply);
 
-      // LLM 返回推理过程文本（与工具调用同时存在时）
-      if (reply.content && reply.tool_calls?.length && !this.opts.json && !this.opts.shhh) {
-        process.stdout.write(`\n💭 ${reply.content}\n`);
-      }
-
       // 没有工具调用 → LLM 返回最终结论
       if (!reply.tool_calls || reply.tool_calls.length === 0) {
         this.printFinalResult(reply.content ?? "(无回复)", step + 1);
         return;
+      }
+
+      // LLM 返回推理过程文本（与工具调用同时存在时）
+      if (reply.content && !this.opts.json && !this.opts.shhh) {
+        process.stdout.write(`\n💭 ${reply.content}\n`);
       }
 
       // 显示本轮工具调用概览
@@ -211,8 +212,8 @@ export class Agent {
     } else {
       console.log(`\n${content}\n`);
       if (!this.opts.shhh) {
-        console.log("─".repeat(40));
-        console.log(`✓ 任务完成，共 ${steps} 轮对话。`);
+        console.log(color.dim("─".repeat(40)));
+        console.log(`${color.green("✓")} 任务完成，共 ${color.cyan(`${steps}`)} 轮对话。`);
       }
     }
   }
@@ -220,9 +221,9 @@ export class Agent {
   private printToolStart(name: string, summary: string): void {
     if (this.opts.json) return;
     if (this.opts.shhh) {
-      console.log(`  [${name}] ${summary}`);
+      console.log(`  [${color.cyan(name)}] ${summary}`);
     } else {
-      console.log(`\n┌─ 工具: ${name}${summary ? `  →  ${summary}` : ""}`);
+      console.log(`\n┌─ 工具: ${color.cyan(name)}${summary ? `  →  ${color.dim(summary)}` : ""}`);
     }
   }
 
@@ -230,7 +231,7 @@ export class Agent {
     if (this.opts.json || this.opts.shhh) return;
     const display = output.length > 2000 ? output.slice(0, 2000) + "\n...(已截断)" : output;
     console.log(display);
-    console.log("└─────");
+    console.log(color.dim("└─────"));
   }
 
   private print(msg: string): void {

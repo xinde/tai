@@ -1,4 +1,4 @@
-# AGENTS.md — AI 运维助手项目说明
+# AGENTS.md — 终端 AI 助手项目说明
 
 > 本文档面向 AI 编程工具（Copilot、Cursor、Claude 等），描述项目架构、约定、扩展要点，帮助 AI 快速理解并安全地修改本项目。
 
@@ -6,7 +6,7 @@
 
 ## 项目一句话描述
 
-一个用自然语言驱动的 AI SRE CLI 工具，基于 OpenAI function calling 实现多步 Agent 循环，用 Bun 运行，零外部 npm 依赖。
+一个用自然语言驱动的终端 AI 助手 CLI 工具，基于 OpenAI function calling 实现多步 Agent 循环，用 Bun 运行，零外部 npm 依赖。
 
 ```
 ai fix nginx          # 自动诊断 + 修复
@@ -24,14 +24,14 @@ ai "check disk"       # 任意自然语言任务
 | 运行时 | Bun |
 | LLM 接入 | OpenAI 兼容 API（function calling） |
 | 外部依赖 | **无**（仅使用 Node.js 内置模块） |
-| 默认模型 | `DeepSeek-V3.1`（可通过 `--model` 或环境变量切换） |
+| 默认模型 | `glm-5`（可通过 `--model` 或环境变量切换） |
 
 ---
 
 ## 目录结构
 
 ```
-aiTui/
+TAI/
 ├── ai.ts                  # 入口（3 行）：import main → main()
 ├── cli/
 │   └── index.ts           # 解析 argv，打印帮助，调用 Agent
@@ -114,11 +114,11 @@ argv
 
 ```ts
 export const defaultConfig = {
-  apiUrl:      process.env.AI_API_URL  ?? "http://localhost:9527/v1/chat/completions",
-  apiKey:      process.env.AI_API_KEY  ?? "<key>",
-  model:       process.env.AI_MODEL   ?? "DeepSeek-V3.1",
+  apiUrl:      process.env.LLM_API_URL  ?? "http://localhost:9527/v1/chat/completions",
+  apiKey:      process.env.LLM_API_KEY  ?? "<key>",
+  model:       process.env.LLM_MODEL   ?? "glm-5",
   maxSteps:    12,     // Agent 每次任务最大工具调用轮数
-  temperature: 0.3,    // 低温度，运维任务要求精确
+  temperature: 0.3,    // 低温度，精确任务要求
 };
 ```
 
@@ -128,9 +128,15 @@ export const defaultConfig = {
 
 1. 在 `tools/` 新建文件，例如 `tools/k8s.ts`
 2. 导出 `k8sDef`（JSON Schema）和 `k8sRun(args)`
-3. 在 `agent/agent.ts` 的 `callLLM` 方法中把 `k8sDef` 加入 `tools` 数组
-4. 在 `executeTool` 的 `switch` 中添加 `case "k8s": return k8sRun(args)`
-5. 如有危险操作，在 `guard/safety.ts` 补充对应 BLOCKED / DANGEROUS 规则
+3. 在 `tools/registry.ts` 中注册工具：
+   ```ts
+   k8s: {
+     def: k8sDef,
+     run: k8sRun,
+     summarize: (a) => `${a.action} ${a.resource || ""}`,
+   },
+   ```
+4. 如有危险操作，在 `guard/safety.ts` 补充对应 BLOCKED / DANGEROUS 规则
 
 ---
 
