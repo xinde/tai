@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-bun ai.ts init                   # 生成 ~/.ai-tui/config.json（首次配置）
+bun ai.ts init                   # 生成 ~/.tai/config.json（首次配置）
 bun ai.ts "fix nginx"            # Run with natural language task
 bun ai.ts doctor                 # System health check + AI analysis
 bun ai.ts "check disk" --debug   # With debug output
@@ -22,7 +22,7 @@ bun run build:all                # All platforms
 
 ## Configuration
 
-配置加载顺序（优先级从高到低）：**环境变量 > `~/.ai-tui/config.json` > 内置默认值**
+配置加载顺序（优先级从高到低）：**环境变量 > `~/.tai/config.json` > 内置默认值**
 
 ```bash
 # 初始化配置文件
@@ -34,7 +34,7 @@ export LLM_API_KEY=your-key
 export LLM_MODEL=glm-5
 ```
 
-配置文件: `~/.ai-tui/config.json`
+配置文件: `~/.tai/config.json`
 
 ## Architecture
 

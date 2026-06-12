@@ -4,7 +4,7 @@
  *   1. BLOCKED  —— 绝对禁止，程序直接拒绝执行
  *   2. DANGEROUS —— 危险操作，需要用户手动确认
  *
- * 内置规则始终生效，用户可在 ~/.ai-tui/config.json 中通过
+ * 内置规则始终生效，用户可在 ~/.tai/config.json 中通过
  * blockedPatterns / dangerousPatterns 数组追加自定义正则。
  */
 

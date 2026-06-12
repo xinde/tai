@@ -65,7 +65,7 @@ ${color.bold("终端 AI 助手")} —— AI CLI          ${color.gray(`v${VERSIO
   ${color.green("ai <任务描述>")}              用自然语言描述一个任务
   ${color.green("ai doctor")}                  运行完整系统健康检查并由 AI 分析
   ${color.green('ai "fix nginx"')}             自动诊断并修复服务
-  ${color.green("ai init")}                    初始化配置文件（写入 ~/.ai-tui/config.json）
+  ${color.green("ai init")}                    初始化配置文件（写入 ~/.tai/config.json）
   ${color.green("ai help")}                    显示此帮助信息
 
 选项:
@@ -78,7 +78,7 @@ ${color.bold("终端 AI 助手")} —— AI CLI          ${color.gray(`v${VERSIO
   ${color.yellow("-v, --version")}              显示版本号
   ${color.yellow("-h, --help")}                 显示帮助信息
 
-配置（优先级：环境变量 > ~/.ai-tui/config.json > 内置默认值）:
+配置（优先级：环境变量 > ~/.tai/config.json > 内置默认值）:
   ${color.blue("LLM_API_URL")}                API 地址
   ${color.blue("LLM_API_KEY")}                API 密钥
   ${color.blue("LLM_MODEL")}                  模型名称

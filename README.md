@@ -162,7 +162,7 @@ Agent 是整个系统的核心，负责：
 
 **自定义规则：**
 
-以上为内置规则，用户可在 `~/.ai-tui/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，详见 [配置](#配置) 章节。
+以上为内置规则，用户可在 `~/.tai/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，详见 [配置](#配置) 章节。
 
 ---
 
@@ -258,7 +258,7 @@ Nginx is now running. Port 80 conflict resolved by stopping apache2.
 
 ## 配置
 
-配置加载顺序（优先级从高到低）：**环境变量 > `~/.ai-tui/config.json` > 内置默认值**
+配置加载顺序（优先级从高到低）：**环境变量 > `~/.tai/config.json` > 内置默认值**
 
 **方式一：配置文件（推荐）**
 
@@ -267,7 +267,7 @@ Nginx is now running. Port 80 conflict resolved by stopping apache2.
 ai init
 ```
 
-配置文件位于 `~/.ai-tui/config.json`（Linux/macOS）或 `C:\Users\<用户名>\.ai-tui\config.json`（Windows），内容如下：
+配置文件位于 `~/.tai/config.json`（Linux/macOS）或 `C:\Users\<用户名>\.tai\config.json`（Windows），内容如下：
 
 ```json
 {
