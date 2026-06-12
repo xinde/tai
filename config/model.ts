@@ -4,7 +4,7 @@ import { homedir } from "os";
 
 // ─── 配置路径 ─────────────────────────────────────────────────────────────────
 
-export const CONFIG_DIR = join(homedir(), ".ai-tui");
+export const CONFIG_DIR = join(homedir(), ".tai");
 export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 // ─── 配置默认值 ─────────────────────────────────────────────────────────────
