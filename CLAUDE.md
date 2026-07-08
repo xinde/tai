@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-终端 AI 助手 (TAI) — an AI-powered CLI tool that uses natural language to diagnose, fix, and verify system issues. Based on OpenAI function calling agent loop, zero external npm dependencies.
+终端 AI 助手 (TAI) — an AI-powered CLI tool that uses natural language to diagnose, fix, and verify system issues. Based on OpenAI function calling agent loop, with dependency use kept small and justified at safety boundaries.
 
 ## Commands
 
@@ -48,7 +48,14 @@ export LLM_MODEL=glm-5
 
 Tool error convention: Return strings starting with `ERROR:` or `Exit N:` instead of throwing.
 
-**Safety** (`guard/safety.ts`): Two-level protection — BLOCKED (hard reject) and DANGEROUS (user confirm). `--auto` flag skips confirmation but cannot bypass BLOCKED.
+**Safety** (`guard/safety.ts`): Three-level protection via `checkCommand()`:
+- **BLOCKED** — hard reject, never executes (destructive patterns, indirect execution like `sh -c`/`$(...)`/`eval`, fetch-and-execute `curl|sh`, writes to protected system paths, executables outside the allowlist).
+- **IRREVERSIBLE** — data-destructive ops (`rm -r`, `docker rm`, `git reset --hard`, `apt purge`); `--auto` cannot bypass these, confirmation always required.
+- **DANGEROUS** — risky but reversible (`kill -9`, `systemctl restart`, `sudo`); `--auto` skips confirmation.
+
+Executable allowlist: only `ALLOWED_EXEC` binaries pass; `DENIED_EXEC` (subshells, interpreters, `dd`, etc.) is a hard boundary not overridable via config. User may extend the allowlist with `allowedExecutables` in `~/.tai/config.json`. `shell.ts` also prefixes commands with `ulimit` (CPU/file-size/fd) to bound blast radius.
+
+Dependency policy: default to Node.js/Bun builtins. Safety-critical parsing may use a small locked dependency when builtins are insufficient; update `package.json`, `bun.lock`, `package-lock.json`, and add regression coverage for dangerous command shapes.
 
 ## Configuration
 
@@ -62,21 +69,20 @@ Config file: `config/model.ts` (do not hardcode API addresses elsewhere).
 ## Adding New Tools
 
 1. Create `tools/xxx.ts` — export `xxxDef` (schema) and `xxxRun(args)` (implementation)
-2. In `agent/agent.ts:46` — add `xxxDef` to the `tools` array
-3. In `agent/agent.ts:95` — add case `case "xxx": return xxxRun(args)`
-4. Add BLOCKED/DANGEROUS patterns in `guard/safety.ts` if the tool involves destructive operations
+2. Register it once in `tools/registry.ts` with `def`, `run`, and optional `summarize`
+3. Add safety rules and tests in `guard/safety.ts` / `guard/safety.test.ts` if the tool reaches destructive operations or shell execution
 
 ## CLI Options
 
 | Flag | Purpose |
 |------|---------|
 | `--model <name>` | Override default model |
-| `--auto` | Skip dangerous command confirmation |
+| `--auto` | Skip DANGEROUS confirmation (IRREVERSIBLE still confirms) |
 | `--debug` | Print token usage and tool call details |
 | `--json` | JSON output for scripting |
 
 ## Key Constraints
 
-- **Zero external dependencies** — Only Node.js builtins (`child_process`, `readline`, `util`, `path`)
+- **Dependency restraint** — Prefer Node.js/Bun builtins; safety-critical parsing dependencies must be justified, locked, and tested
 - **Path safety** — `logs.ts` and `fs.ts` require absolute paths only, use `path.normalize()`
 - **Tool output** — Return strings, never throw; LLM uses output to decide next steps

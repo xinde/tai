@@ -1,9 +1,12 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { isBlocked, isDangerous } from "../guard/safety";
+import { checkCommand } from "../guard/safety";
 import { confirm } from "../utils/prompt";
 
 const execAsync = promisify(exec);
+
+// 资源限额：CPU 60s、最大写入文件 ~1GB、fd 256 —— 限制爆炸半径
+const RESOURCE_LIMITS = "ulimit -t 60 -f 2097152 -n 256";
 
 /** shell 工具的 OpenAI function calling 定义 */
 export const shellDef = {
@@ -41,19 +44,23 @@ export async function shellRun(
     process.stderr.write(`[shell] cmd: ${cmd}\n`);
   }
 
-  // 第一级防护：绝对禁止的命令
-  if (isBlocked(cmd)) {
-    return `BLOCKED: 出于安全原因，已拒绝执行此命令: ${cmd}`;
+  // 安全判定：blocked 直接拒；irreversible 即便 --auto 也要确认；dangerous 仅非 auto 确认
+  const verdict = checkCommand(cmd);
+  if (verdict.level === "blocked") {
+    return `BLOCKED: ${verdict.reason}`;
   }
-
-  // 第二级防护：危险命令需要用户确认（auto 模式跳过）
-  if (!opts.auto && isDangerous(cmd)) {
-    const ok = await confirm(`危险命令: ${cmd}`);
+  const needConfirm =
+    verdict.level === "irreversible" ||
+    (verdict.level === "dangerous" && !opts.auto);
+  if (needConfirm) {
+    const ok = await confirm(`[${verdict.level}] ${cmd}`);
     if (!ok) return "用户已取消执行。";
   }
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { timeout: 30_000 });
+    const { stdout, stderr } = await execAsync(`${RESOURCE_LIMITS}; ${cmd}`, {
+      timeout: 30_000,
+    });
     return stdout || stderr || "(no output)";
   } catch (err: any) {
     // 命令执行失败，返回错误信息供 AI 分析

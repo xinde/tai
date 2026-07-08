@@ -29,6 +29,7 @@ interface JsonConfig {
   temperature?: number;
   blockedPatterns?: string[];
   dangerousPatterns?: string[];
+  allowedExecutables?: string[];
 }
 
 function loadJsonConfig(): JsonConfig {
@@ -59,13 +60,18 @@ export const defaultConfig: AgentConfig = mergeConfig();
 
 // ─── 用户自定义安全规则 ─────────────────────────────────────────────────────
 
-export function loadUserSafetyPatterns(): { blocked: RegExp[]; dangerous: RegExp[] } {
+export function loadUserSafetyPatterns(): {
+  blocked: RegExp[];
+  dangerous: RegExp[];
+  allowed: string[];
+} {
   const json = loadJsonConfig();
   const toRegexps = (patterns?: string[]): RegExp[] =>
     (patterns ?? []).map((p) => new RegExp(p));
   return {
     blocked: toRegexps(json.blockedPatterns),
     dangerous: toRegexps(json.dangerousPatterns),
+    allowed: json.allowedExecutables ?? [],
   };
 }
 
@@ -77,6 +83,7 @@ export function initConfig(): void {
     ...DEFAULTS,
     blockedPatterns: [] as string[],
     dangerousPatterns: [] as string[],
+    allowedExecutables: [] as string[],
   };
   writeFileSync(CONFIG_PATH, JSON.stringify(initTemplate, null, 2), "utf-8");
   console.log(`✅ 配置文件已写入: ${CONFIG_PATH}`);

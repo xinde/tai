@@ -6,7 +6,7 @@
 
 ## 项目一句话描述
 
-一个用自然语言驱动的终端 AI 助手 CLI 工具，基于 OpenAI function calling 实现多步 Agent 循环，用 Bun 运行，零外部 npm 依赖。
+一个用自然语言驱动的终端 AI 助手 CLI 工具，基于 OpenAI function calling 实现多步 Agent 循环，用 Bun 运行，默认避免外部 npm 依赖。
 
 ```
 ai fix nginx          # 自动诊断 + 修复
@@ -23,7 +23,7 @@ ai "check disk"       # 任意自然语言任务
 | 语言 | TypeScript |
 | 运行时 | Bun |
 | LLM 接入 | OpenAI 兼容 API（function calling） |
-| 外部依赖 | **无**（仅使用 Node.js 内置模块） |
+| 外部依赖 | 默认不用；安全解析等高风险边界可引入小型、锁定版本依赖 |
 | 默认模型 | `glm-5`（可通过 `--model` 或环境变量切换） |
 
 ---
@@ -44,7 +44,7 @@ TAI/
 │   ├── docker.ts          # Docker 容器管理
 │   └── fs.ts              # 只读文件系统操作
 ├── guard/
-│   └── safety.ts          # 命令安全守卫（两级：BLOCKED / DANGEROUS）
+│   └── safety.ts          # 命令安全守卫（BLOCKED / IRREVERSIBLE / DANGEROUS）
 ├── utils/
 │   └── prompt.ts          # 终端 y/n 确认对话框
 └── config/
@@ -76,20 +76,27 @@ argv
 
 ## 重要约定（修改代码时必须遵守）
 
-### 1. 零外部依赖
-不引入任何 npm 包。所有功能只用：
+### 1. 依赖克制
+默认不引入 npm 包，普通功能优先只用：
 - `child_process`（exec）
 - `readline`（终端确认）
 - `util`（promisify）
 - `path`（路径处理）
 
-### 2. 安全守卫不可绕过
-`guard/safety.ts` 的两级检查是硬性约束：
+安全解析、命令边界等高风险场景可以放松此约束，但必须：
+- 说明为什么内置能力不足
+- 同步 `package.json`、`bun.lock`、`package-lock.json`
+- 添加覆盖危险输入形状的回归测试
 
-- **BLOCKED**：正则匹配即直接返回拒绝消息，永远不执行，不可通过 `--auto` 绕过。
-- **DANGEROUS**：`--auto` 模式跳过确认，其他情况必须调用 `confirm()`。
+### 2. 安全守卫不可绕过
+`guard/safety.ts` 的三级检查是硬性约束：
+
+- **BLOCKED**：直接返回拒绝消息，永远不执行，不可通过 `--auto` 或用户 allowlist 绕过。
+- **IRREVERSIBLE**：不可逆/破坏性操作，必须确认，`--auto` 也不能跳过。
+- **DANGEROUS**：危险但可恢复操作，`--auto` 模式跳过确认，其他情况必须调用 `confirm()`。
 
 新增 shell 命令能力时，如果涉及破坏性操作，**必须**在 `safety.ts` 补充对应规则。
+涉及 shell 解析、控制符、包装器（如 `sudo`/`env`/`timeout`）时，必须同步补充 `guard/safety.test.ts`。
 
 ### 3. 工具定义格式
 每个工具文件导出两个内容：
@@ -145,7 +152,7 @@ export const defaultConfig = {
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `--model <name>` | string | 覆盖默认模型 |
-| `--auto` | flag | 跳过危险命令确认（BLOCKED 仍然拦截） |
+| `--auto` | flag | 跳过 DANGEROUS 确认（BLOCKED 拦截，IRREVERSIBLE 仍确认） |
 | `--debug` | flag | 打印 token 用量和工具调用入参到 stderr |
 | `--json` | flag | 最终结果以 JSON `{ result }` 输出，适合脚本集成 |
 
@@ -172,7 +179,7 @@ bun run build
 | CLI + 参数解析 | ✅ |
 | Agent Loop（function calling） | ✅ |
 | shell / doctor / logs / docker / filesystem 工具 | ✅ |
-| 两级安全守卫 | ✅ |
+| 三级安全守卫 | ✅ |
 | JSON 输出 / Debug 模式 | ✅ |
 | 单文件编译 | ✅ |
 | Memory（`~/.ai-agent/` 历史记录） | ⬜ v2 |

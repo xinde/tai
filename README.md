@@ -66,6 +66,7 @@ AI 能够：
   安全守卫 (guard/safety.ts)
   ┌──────────────────────────────┐
   │ BLOCKED (直接拒绝)           │
+  │ IRREVERSIBLE (始终确认)      │
   │ DANGEROUS (用户确认)         │
   └──────────────────────────────┘
      ↓
@@ -98,14 +99,14 @@ TAI/
 │   └── agent.ts           # Agent 主循环：LLM 调用 + 工具路由 + 对话管理
 │
 ├── tools/
-│   ├── shell.ts           # 执行 shell 命令（含双层安全检查）
+│   ├── shell.ts           # 执行 shell 命令（含三级安全检查）
 │   ├── doctor.ts          # 系统健康检查（并发收集 CPU/内存/磁盘/Docker）
 │   ├── logs.ts            # 读取日志文件末尾 N 行
 │   ├── docker.ts          # Docker 容器管理（list/logs/restart/stop/start）
 │   └── fs.ts              # 只读文件系统操作（ls/cat/du）
 │
 ├── guard/
-│   └── safety.ts          # 命令安全守卫（BLOCKED + DANGEROUS 两级规则）
+│   └── safety.ts          # 命令安全守卫（BLOCKED / IRREVERSIBLE / DANGEROUS）
 │
 ├── utils/
 │   └── prompt.ts          # 终端确认对话框（y/n）
@@ -137,32 +138,42 @@ Agent 是整个系统的核心，负责：
 | 参数 | 说明 |
 |------|------|
 | `--model <name>` | 覆盖默认模型 |
-| `--auto` | 自动执行危险命令，跳过确认 |
+| `--auto` | 自动执行 DANGEROUS 命令，IRREVERSIBLE 仍需确认 |
 | `--debug` | 打印 LLM token 用量和工具调用 |
 | `--json` | 以 JSON 格式输出最终结果 |
 | `--shhh` | 静默模式，仅输出工具名称、参数和最终结果 |
 
 ### `guard/safety.ts` — 安全守卫
 
-两级防护，不可绕过：
+三级防护，不可绕过：
 
-**第一级 BLOCKED（直接拒绝）：**
+**BLOCKED（直接拒绝）：**
 - `rm -rf /`
 - `mkfs`（格式化文件系统）
 - `shutdown` / `reboot`
 - Fork Bomb `:(){ :|:& };:`
 - 覆写磁盘设备 `dd of=/dev/...`
+- 间接执行入口，如 `sh -c`、`eval`、`$()`、`` `...` ``
+- fetch-and-execute，如 `curl ... | sh`
+- 写入受保护系统路径
+- allowlist 外的可执行程序
 
-**第二级 DANGEROUS（需用户确认）：**
+**IRREVERSIBLE（始终确认，`--auto` 不跳过）：**
 - `rm -r`（递归删除）
-- `apt/yum/dnf remove`（卸载软件包）
 - `docker rm` / `docker rmi`
+- `git reset --hard` / `git clean -fdx`
+- `apt purge`
+- `crontab -r`
+
+**DANGEROUS（非 `--auto` 时需确认）：**
+- `sudo`
+- `apt/yum/dnf remove`（卸载软件包）
 - `kill -9` / `pkill`
-- `systemctl stop/disable`
+- `systemctl stop/disable/restart/reload`
 
 **自定义规则：**
 
-以上为内置规则，用户可在 `~/.tai/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，详见 [配置](#配置) 章节。
+以上为内置规则，用户可在 `~/.tai/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，也可通过 `allowedExecutables` 扩展可执行程序 allowlist。`DENIED_EXEC` 是硬边界，不可通过配置绕过。
 
 ---
 

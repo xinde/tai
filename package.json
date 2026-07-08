@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "bun ai.ts",
+    "test": "bun test",
     "build": "bun build --compile --target bun-macos-arm64 ai.ts --outfile dist/ai-macos-arm64",
     "build:mac-arm": "bun build --compile --target bun-macos-arm64 ai.ts --outfile dist/ai-macos-arm64",
     "build:mac-x64": "bun build --compile --target bun-macos-x64   ai.ts --outfile dist/ai-macos-x64",
@@ -20,5 +21,8 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.5.0"
+  },
+  "dependencies": {
+    "shell-quote": "^1.9.0"
   }
 }
