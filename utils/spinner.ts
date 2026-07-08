@@ -5,6 +5,7 @@
 
 const FRAMES = ["-", "\\", "|", "/"];
 const INTERVAL = 80;
+const CLEAR_LINE = "\r\x1b[2K";
 
 export class Spinner {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -34,7 +35,7 @@ export class Spinner {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      process.stderr.write("\r" + " ".repeat(this.message.length + 4) + "\r");
+      process.stderr.write(CLEAR_LINE);
     }
   }
 }
