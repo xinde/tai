@@ -71,6 +71,10 @@ AI 能够：
   └──────────────────────────────┘
      ↓
   系统执行
+     ↓
+  工具输出压缩 (utils/toolOutput.ts)
+     ↓
+  精简后的 tool message 回传给 LLM
 ```
 
 **Agent Loop 原理**
@@ -80,7 +84,7 @@ Agent 循环基于 OpenAI function calling 标准格式，不依赖任何外部 
 1. 用户请求封装为 `user` 消息加入对话历史
 2. 调用 LLM，附带所有工具的 JSON Schema 定义
 3. LLM 返回 `tool_calls`，Agent 逐一执行
-4. 将每个工具的输出以 `tool` role 消息追加到对话历史
+4. 用户可见输出保持完整展示，回传给 LLM 的工具输出先做长度压缩
 5. 再次调用 LLM，直到 LLM 不再调用工具（输出最终结论）
 6. 最多循环 12 步，防止无限调用
 
@@ -109,7 +113,10 @@ TAI/
 │   └── safety.ts          # 命令安全守卫（BLOCKED / IRREVERSIBLE / DANGEROUS）
 │
 ├── utils/
-│   └── prompt.ts          # 终端确认对话框（y/n）
+│   ├── prompt.ts          # 终端确认对话框（y/n）
+│   ├── spinner.ts         # 终端等待动画
+│   ├── color.ts           # 终端颜色输出
+│   └── toolOutput.ts      # 工具输出压缩，控制 LLM 上下文体积
 │
 ├── config/
 │   └── model.ts           # API 地址、Key、模型名称等配置
@@ -128,8 +135,18 @@ Agent 是整个系统的核心，负责：
 - 维护对话历史（`Message[]`）
 - 向 LLM 传递工具定义（5 个工具的 JSON Schema）
 - 解析 LLM 返回的 `tool_calls`，路由到对应工具函数
-- 将工具输出追加到对话历史，驱动下一轮推理
+- 将压缩后的工具输出追加到对话历史，驱动下一轮推理
 - `--debug` 模式下打印 token 用量和工具调用详情
+
+### `utils/toolOutput.ts` — 工具输出压缩
+
+工具原始输出会完整用于终端展示，但不会原样全部塞回 LLM 上下文。`compactToolOutputForLLM()` 默认将超过 6000 字符的输出压缩为：
+
+- 压缩说明：原始长度、省略长度、省略行数
+- 输出头部：保留命令开头、表头、上下文
+- 输出尾部：保留最后的错误、验证结果、关键结论
+
+这样可以避免大日志、`doctor` 输出、`cat` 大文件内容持续占用上下文，同时保留模型继续推理最需要的首尾信息。
 
 ### `cli/index.ts` — CLI 解析
 
@@ -146,6 +163,18 @@ Agent 是整个系统的核心，负责：
 ### `guard/safety.ts` — 安全守卫
 
 三级防护，不可绕过：
+
+安全检测不是只靠简单字符串匹配。命令会先经过 `shell-quote` 解析成 shell token，再按控制符拆成多个命令段逐段检查；正则规则作为硬黑名单和分级确认的补充兜底。
+
+当前检查覆盖：
+
+- shell 控制符：`|`、`|&`、`;`、`&&`、`||`、`&`
+- 命令替换和进程替换：`$()`、反引号、`<()`
+- 执行包装器：`sudo`、`env`、`timeout`、`watch`、`nohup`、`setsid`、`time`、`nice`
+- fetch-and-execute：例如 `curl ... | sh`
+- `find -exec` / `find -ok` / `find -delete`
+- 写入受保护系统路径：例如 `/etc`、`/usr`、`/bin`、`/sbin`
+- allowlist 外的可执行程序
 
 **BLOCKED（直接拒绝）：**
 - `rm -rf /`
@@ -174,6 +203,15 @@ Agent 是整个系统的核心，负责：
 **自定义规则：**
 
 以上为内置规则，用户可在 `~/.tai/config.json` 中通过 `blockedPatterns` / `dangerousPatterns` 追加自定义正则，也可通过 `allowedExecutables` 扩展可执行程序 allowlist。`DENIED_EXEC` 是硬边界，不可通过配置绕过。
+
+**执行资源限制：**
+
+`shell` 工具执行前会附加基础资源限制，降低失控命令的影响范围：
+
+- CPU 时间：最多 60 秒
+- 文件写入：约 1GB
+- 文件描述符：最多 256 个
+- 单次命令超时：30 秒
 
 ---
 
@@ -288,7 +326,8 @@ ai init
   "maxSteps": 12,
   "temperature": 0.3,
   "blockedPatterns": [],
-  "dangerousPatterns": []
+  "dangerousPatterns": [],
+  "allowedExecutables": []
 }
 ```
 
@@ -305,6 +344,7 @@ ai init
 
 - `blockedPatterns` — 绝对禁止执行，无法绕过
 - `dangerousPatterns` — 需用户手动确认后执行（`--auto` 可跳过确认）
+- `allowedExecutables` — 追加允许执行的命令名，不能覆盖硬黑名单
 - 值为正则表达式字符串数组，注意 JSON 中反斜杠需要转义（`\b` → `\\b`）
 - 内置规则始终保留，自定义规则在内置规则基础上追加
 
@@ -375,7 +415,9 @@ ai --help
 | Tool: docker | `tools/docker.ts` | ✅ |
 | Tool: filesystem | `tools/fs.ts` | ✅ |
 | Command Guard（BLOCKED） | `guard/safety.ts` | ✅ |
+| Shell AST / token 解析安全检测 | `guard/safety.ts` + `shell-quote` | ✅ |
 | Confirmation（DANGEROUS） | `guard/safety.ts` + `utils/prompt.ts` | ✅ |
+| 工具输出压缩后回传 LLM | `utils/toolOutput.ts` + `agent/agent.ts` | ✅ |
 | `ai doctor` 诊断分析 | `tools/doctor.ts` + Agent | ✅ |
 | 自动修复能力（fix 流程） | Agent 多步推理 | ✅ |
 | JSON 输出模式 | `cli/index.ts` + `agent/agent.ts` | ✅ |
@@ -389,6 +431,7 @@ ai --help
 ## 技术选型说明
 
 - **运行时：Bun** — 原生 TypeScript 支持，启动速度快，适合 CLI 场景
-- **零外部依赖** — 仅使用 Node.js 内置模块（`child_process`、`readline`、`util`），便于在服务器上部署和分发
+- **依赖克制** — 默认优先使用 Node.js 内置模块；安全解析边界引入小型依赖 `shell-quote`，用于解析 shell token，避免只靠字符串正则判断命令风险
 - **OpenAI function calling** — 工具调用使用标准格式，兼容任何 OpenAI 兼容 API（Ollama、本地模型等）
 - **多步 Agent（最多 12 步）** — 支持复杂任务如"诊断 → 修复 → 验证"全流程自动化
+- **上下文预算控制** — 大工具输出先压缩再回传 LLM，减少日志和诊断信息对上下文的挤占
