@@ -3,6 +3,7 @@ import { toolRegistry, getAllToolDefs, getToolNames } from "../tools/registry";
 import { collectEnvInfo, buildSystemPrompt } from "./prompt";
 import { Spinner } from "../utils/spinner";
 import { color } from "../utils/color";
+import { compactToolOutputForLLM } from "../utils/toolOutput";
 
 // ─── 类型定义（OpenAI Chat API 格式）────────────────────────────────────────
 
@@ -198,7 +199,7 @@ export class Agent {
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
-          content: output,
+          content: compactToolOutputForLLM(output),
         });
       }
     }
