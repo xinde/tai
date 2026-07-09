@@ -151,6 +151,7 @@ export class Agent {
       { role: "system", content: systemPrompt },
       { role: "user", content: userInput },
     ];
+    let toolRounds = 0;
 
     for (let step = 0; step < this.config.maxSteps; step++) {
       if (this.aborted) {
@@ -168,7 +169,7 @@ export class Agent {
 
       // 没有工具调用 → LLM 返回最终结论
       if (!reply.tool_calls || reply.tool_calls.length === 0) {
-        this.printFinalResult(reply.content ?? "(无回复)", step + 1);
+        this.printFinalResult(reply.content ?? "(无回复)", toolRounds);
         return;
       }
 
@@ -178,8 +179,9 @@ export class Agent {
       }
 
       // 显示本轮工具调用概览
+      toolRounds++;
       if (!this.opts.json && !this.opts.shhh) {
-        console.log(`\n── 第 ${step + 1} 轮 ─ ${reply.tool_calls.length} 个工具调用 ──`);
+        console.log(`\n── 第 ${toolRounds} 轮 ─ ${reply.tool_calls.length} 个工具调用 ──`);
       }
 
       // 执行本轮所有工具调用
@@ -206,14 +208,14 @@ export class Agent {
 
   // ─── 输出方法 ─────────────────────────────────────────────────────────────
 
-  private printFinalResult(content: string, steps: number): void {
+  private printFinalResult(content: string, toolRounds: number): void {
     if (this.opts.json) {
       console.log(JSON.stringify({ result: content }, null, 2));
     } else {
       console.log(`\n${content}\n`);
       if (!this.opts.shhh) {
         console.log(color.dim("─".repeat(40)));
-        console.log(`${color.green("✓")} 任务完成，共 ${color.cyan(`${steps}`)} 轮对话。`);
+        console.log(`${color.green("✓")} 任务完成，共 ${color.cyan(`${toolRounds}`)} 轮工具调用。`);
       }
     }
   }
