@@ -1,9 +1,8 @@
 import { Agent } from "../agent/agent";
 import { defaultConfig, initConfig, CONFIG_PATH } from "../config/model";
 import { existsSync } from "fs";
+import { version as VERSION } from "../package.json";
 import { color } from "../utils/color";
-
-const VERSION = "2.1.0";
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -82,6 +81,7 @@ ${color.bold("终端 AI 助手")} —— AI CLI          ${color.gray(`v${VERSIO
   ${color.blue("LLM_API_URL")}                API 地址
   ${color.blue("LLM_API_KEY")}                API 密钥
   ${color.blue("LLM_MODEL")}                  模型名称
+  ${color.blue("LLM_TIMEOUT_MS")}             单次模型请求超时（毫秒，默认 60000）
 
 示例:
   ${color.gray("ai init")}                     # 生成配置文件后手动编辑
@@ -143,22 +143,22 @@ export async function main(): Promise<void> {
   });
 
   // 优雅中断：Ctrl+C 时通知 Agent 停止
-  const sigHandler = () => {
-    agent.abort();
-    if (!parsed.json) console.log("\n\n⚠ 收到中断信号，正在停止...");
-  };
-  process.on("SIGINT", sigHandler);
+  const sigHandler = () => agent.abort();
+  process.once("SIGINT", sigHandler);
 
   try {
     await agent.run(parsed.task);
   } catch (err: any) {
+    const interrupted = err.name === "AbortError";
     if (parsed.json) {
-      console.log(JSON.stringify({ error: err.message }));
+      console.log(JSON.stringify({ error: interrupted ? "任务已中断。" : err.message }));
+    } else if (interrupted) {
+      console.error("\n⚠ 任务已中断。");
     } else {
       console.error(`\n❌ 错误: ${err.message}`);
       if (parsed.debug) console.error(err.stack);
     }
-    process.exit(1);
+    process.exitCode = interrupted ? 130 : 1;
   } finally {
     process.off("SIGINT", sigHandler);
   }

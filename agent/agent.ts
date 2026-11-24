@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { type AgentConfig } from "../config/model";
 import { toolRegistry, getAllToolDefs, getToolNames } from "../tools/registry";
 import { collectEnvInfo, buildSystemPrompt } from "./prompt";
@@ -35,7 +36,7 @@ export interface AgentOptions {
 export class Agent {
   private config: AgentConfig;
   private opts: AgentOptions;
-  private aborted = false;
+  private readonly abortController = new AbortController();
   private spinner: Spinner;
 
   constructor(config: AgentConfig, opts: AgentOptions) {
@@ -46,7 +47,7 @@ export class Agent {
 
   /** 允许外部中止 Agent 循环 */
   abort(): void {
-    this.aborted = true;
+    this.abortController.abort();
     this.spinner.stop();
   }
 
@@ -55,11 +56,16 @@ export class Agent {
     const tools = getAllToolDefs();
     const modelName = this.opts.model ?? this.config.model;
     const maxRetries = 2;
+    const taskSignal = this.abortController.signal;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      taskSignal.throwIfAborted();
+      const timeoutSignal = AbortSignal.timeout(this.config.requestTimeoutMs);
+      const signal = AbortSignal.any([taskSignal, timeoutSignal]);
       try {
         const res = await fetch(this.config.apiUrl, {
           method: "POST",
+          signal,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${this.config.apiKey}`,
@@ -76,15 +82,17 @@ export class Agent {
 
         if (!res.ok) {
           const body = await res.text();
+          signal.throwIfAborted();
           if (res.status >= 500 && attempt < maxRetries) {
             this.debugLog(`[llm] 服务端错误 ${res.status}，第 ${attempt + 1} 次重试...`);
-            await this.sleep(1000 * (attempt + 1));
+            await delay(1000 * (attempt + 1), undefined, { signal: taskSignal });
             continue;
           }
           throw new Error(`LLM API 请求失败 (${res.status}): ${body}`);
         }
 
         const data = (await res.json()) as any;
+        signal.throwIfAborted();
 
         if (this.opts.debug) {
           const usage = data.usage ?? {};
@@ -95,9 +103,13 @@ export class Agent {
 
         return data.choices[0].message as Message;
       } catch (err: any) {
+        taskSignal.throwIfAborted();
+        if (timeoutSignal.aborted) {
+          throw new Error(`LLM API 请求超时（${this.config.requestTimeoutMs} ms）`);
+        }
         if (attempt < maxRetries && this.isNetworkError(err)) {
           this.debugLog(`[llm] 网络错误: ${err.message}，第 ${attempt + 1} 次重试...`);
-          await this.sleep(1000 * (attempt + 1));
+          await delay(1000 * (attempt + 1), undefined, { signal: taskSignal });
           continue;
         }
         throw err;
@@ -143,7 +155,10 @@ export class Agent {
    * 直到 LLM 不再调用工具（返回最终回答）或达到最大步数
    */
   async run(userInput: string): Promise<void> {
+    const signal = this.abortController.signal;
+    signal.throwIfAborted();
     const envInfo = await collectEnvInfo();
+    signal.throwIfAborted();
     const systemPrompt = buildSystemPrompt(envInfo);
 
     this.debugLog(`[env]\n${envInfo}\n`);
@@ -155,17 +170,14 @@ export class Agent {
     let toolRounds = 0;
 
     for (let step = 0; step < this.config.maxSteps; step++) {
-      if (this.aborted) {
-        this.print("\n⚠ 任务已中断。");
-        return;
-      }
+      signal.throwIfAborted();
 
       if (!this.opts.json && !this.opts.shhh) {
         this.spinner.start(step === 0 ? "思考中" : "继续思考");
       }
 
-      const reply = await this.callLLM(messages);
-      this.spinner.stop();
+      const reply = await this.callLLM(messages).finally(() => this.spinner.stop());
+      signal.throwIfAborted();
       messages.push(reply);
 
       // 没有工具调用 → LLM 返回最终结论
@@ -193,6 +205,7 @@ export class Agent {
         this.printToolStart(name, summary);
 
         const output = await this.executeTool(name, argsJson);
+        signal.throwIfAborted();
 
         this.printToolResult(output);
 
@@ -246,10 +259,6 @@ export class Agent {
   }
 
   // ─── 辅助方法 ─────────────────────────────────────────────────────────────
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
-  }
 
   private isNetworkError(err: any): boolean {
     const msg = String(err?.message ?? "").toLowerCase();

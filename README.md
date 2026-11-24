@@ -316,7 +316,7 @@ Nginx is now running. Port 80 conflict resolved by stopping apache2.
 ai init
 ```
 
-配置文件位于 `~/.tai/config.json`（Linux/macOS）或 `C:\Users\<用户名>\.tai\config.json`（Windows），内容如下：
+配置文件位于 `~/.tai/config.json`（Linux/macOS）或 `C:\Users\<用户名>\.tai\config.json`（Windows）。重复执行 `ai init` 会显示现有配置文件的路径，并保留文件内容。配置示例：
 
 ```json
 {
@@ -324,12 +324,15 @@ ai init
   "apiKey": "",
   "model": "glm-5",
   "maxSteps": 12,
+  "requestTimeoutMs": 60000,
   "temperature": 0.3,
   "blockedPatterns": [],
   "dangerousPatterns": [],
   "allowedExecutables": []
 }
 ```
+
+单次模型请求默认最多等待 60 秒。可通过 `LLM_TIMEOUT_MS` 或配置中的 `requestTimeoutMs` 调整，单位为毫秒。等待模型响应或重试时，按 `Ctrl+C` 会取消等待并以退出码 `130` 结束。
 
 **自定义安全规则**
 
@@ -364,6 +367,12 @@ bun run build:win-x64           # Windows x64
 ```
 
 产出位于 `./dist/` 目录。
+
+**GitHub Actions**
+
+推送到 `master` 后，Actions 会运行测试并上传五个平台的构建产物。推送与 `package.json` 版本一致的 `V` 标签（例如 `V2.2.0`）后，测试和构建通过时会自动发布。 [GitHub Releases](https://github.com/xinde/aiTui/releases)
+
+macOS 二进制使用临时签名，未进行 Apple 公证。在 macOS 或 Linux 下载二进制后，先用 `chmod +x` 添加执行权限。
 
 **全局可用**
 
