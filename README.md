@@ -370,7 +370,7 @@ bun run build:win-x64           # Windows x64
 
 **GitHub Actions**
 
-推送到 `master` 后，Actions 会运行测试并上传五个平台的构建产物。推送与 `package.json` 版本一致的 `V` 标签（例如 `V2.2.0`）后，测试和构建通过时会自动发布。 [GitHub Releases](https://github.com/xinde/aiTui/releases)
+推送到 `master` 后，Actions 会运行测试并上传五个平台的构建产物。单独推送与 `package.json` 版本一致的 `V` 标签（例如 `V2.2.0`）后，测试和构建通过时会自动发布。如果已推送的标签没有触发构建，可以在 Actions 里手动运行 **Build and release**，填入该标签。 [GitHub Releases](https://github.com/xinde/tai/releases)
 
 macOS 二进制使用临时签名，未进行 Apple 公证。在 macOS 或 Linux 下载二进制后，先用 `chmod +x` 添加执行权限。
 

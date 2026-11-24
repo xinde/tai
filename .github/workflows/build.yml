@@ -6,6 +6,12 @@ on:
       - master
     tags:
       - 'V*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -13,9 +19,13 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    outputs:
+      tag: ${{ steps.verify.outputs.tag }}
+      commit: ${{ steps.verify.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -24,11 +34,14 @@ jobs:
       - run: bun test
       - run: bun run build:all
       - name: Verify binaries and release version
+        id: verify
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
         run: |
           version=$(bun -e 'console.log(require("./package.json").version)')
-          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "V$version" ]]; then
-            printf 'Release tag %s must match V%s\n' "$GITHUB_REF_NAME" "$version" >&2
+          if [[ -n "$RELEASE_TAG" && "$RELEASE_TAG" != "V$version" ]]; then
+            printf 'Release tag %s must match V%s\n' "$RELEASE_TAG" "$version" >&2
             exit 1
           fi
           for binary in ai-macos-arm64 ai-macos-x64 ai-linux-x64 ai-linux-arm64 ai-win-x64.exe; do
@@ -39,6 +52,9 @@ jobs:
             codesign --verify --strict "$binary"
           done
           ./dist/ai-macos-arm64 --version | grep -Fx "ai v$version"
+          if [[ -n "$RELEASE_TAG" ]]; then
+            printf 'tag=%s\ncommit=%s\n' "$RELEASE_TAG" "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ai-binaries
@@ -47,7 +63,7 @@ jobs:
           overwrite: true
 
   release:
-    if: github.ref_type == 'tag'
+    if: needs.build.outputs.tag != ''
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -61,4 +77,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" dist/ai-* --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          BUILT_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          tagged_commit=$(gh api --method GET "repos/$GH_REPO/commits" -f "sha=refs/tags/$RELEASE_TAG" -F per_page=1 --jq '.[0].sha')
+          if [[ "$tagged_commit" != "$BUILT_COMMIT" ]]; then
+            printf 'Release tag %s no longer points to %s\n' "$RELEASE_TAG" "$BUILT_COMMIT" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/ai-* --verify-tag --title "$RELEASE_TAG" --generate-notes
